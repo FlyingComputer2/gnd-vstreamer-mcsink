@@ -76,7 +76,9 @@ void test_text_and_latency()
     CHECK(osd.query("text", &text) == 0);
     std::printf("osd text: %s\n", text.c_str());
     // 6000 kbit over 1.001 s; 30 frames over the same window.
-    CHECK(text == "5994 kbps, 80.000 ms, 30.0 fps");
+    CHECK(text == "5994 kbps, 30.0 fps, --- ms");  // glass latency not set yet
+    std::string decode;
+    CHECK(osd.query("latency_ms", &decode) == 0 && decode == "80.000");
     // The frame now carries the burned-in text: white glyph pixels in the top-left box.
     CHECK(osd.output(out) == 0);
     const uint8_t *y = out.sdu.u8();
@@ -95,7 +97,7 @@ void test_text_and_latency()
 }
 
 // The app sets the display's capture -> on-screen latency; the next window
-// appends it after the fps.
+// shows it as the OSD's latency.
 void test_screen_latency()
 {
     auto counters = std::make_shared<mcsink::stats>();
@@ -114,7 +116,7 @@ void test_screen_latency()
     std::string text;
     osd.query("text", &text);
     std::printf("osd text: %s\n", text.c_str());
-    CHECK(text.size() > 16 && text.compare(text.size() - 16, 16, ", screen 97.3 ms") == 0);
+    CHECK(text.size() > 13 && text.compare(text.size() - 13, 13, " fps, 97.3 ms") == 0);
 }
 
 void test_no_capture_time()
@@ -132,7 +134,9 @@ void test_no_capture_time()
     }
     std::string text;
     osd.query("text", &text);
-    CHECK(text.find(", --- ms,") != std::string::npos);
+    std::string decode;
+    osd.query("latency_ms", &decode);
+    CHECK(decode == "-1.000");
 }
 
 // The MPP decoder packs frames to the visible height (1080 rows) while its

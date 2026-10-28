@@ -4,7 +4,8 @@
  *   rx:      multicast_source -> rtp_h264_depay -> h264_decoder_mpp -> osd_overlay -> queue
  *   display: queue -> sdl_sink (KMSDRM on the console, or a window under X/Wayland)
  *
- * The OSD shows bitrate, camera-to-decode latency and decode fps. Latency compares the
+ * The OSD shows bitrate, decode fps and camera-to-screen latency (the MCSINK line also has
+ * camera-to-decode). Latency compares the
  * rover's capture CLOCK_REALTIME (RTP header extension id 2) with this host's, so this
  * host's clock must be the one the ground P4 follows (its SNTP server) or agree with it.
  */
