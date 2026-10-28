@@ -68,6 +68,7 @@ build/gnd-vstreamer-mcsink --interface end1 --display sdl   # window under X/Way
 | `--display` | `kmsdrm` | `kmsdrm` or `sdl` |
 | `--fps` | `30` | nominal frame rate |
 | `--osd` | `1` | `0` turns off the burn-in (the stats lines stay) |
+| `--show-corrupt` | `1` | show frames decoded after a loss, with artifacts; `0` drops them, freezing until the next IDR |
 | `--stats` | `1` | seconds between stderr `MCSINK` lines, `0` = off |
 
 As a service on the GS host (`deploy/gnd-vstreamer-mcsink.service`: runs as `ubuntu` on tty1, conflicts
@@ -88,9 +89,12 @@ screenshots. With `SDL_VIDEODRIVER=offscreen` and `--display sdl` it runs
 headless:
 
 ```text
-MCSINK kbps=5994 latency_ms=84.512 fps=29.90 received=… dropped=… rtp_lost=… capture_rejected=… display="…"
+MCSINK kbps=5994 latency_ms=84.512 fps=29.90 received=… dropped=… rtp_lost=… capture_rejected=… corrupt_frames=… osd="drawn=… skipped=… …" display="…"
 ```
 
 `dropped` counts datagrams this receiver's queue discarded. `rtp_lost` counts
 RTP sequence gaps on arrival: loss on the radio after FEC, at the ground P4's
-multicast fanout, or on the LAN.
+multicast fanout, or on the LAN. `corrupt_frames` counts frames the decoder
+flagged as decoded against a lost reference (shown with `--show-corrupt 1`).
+`osd` counts frames the OSD was drawn on and skipped (no caps yet, or a frame
+smaller than its layout), with the caps and the last frame size.

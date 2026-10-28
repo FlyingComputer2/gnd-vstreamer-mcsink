@@ -56,6 +56,10 @@ private:
     std::deque<vstreamer::component_pdu> out_;
     vstreamer::video_raw_caps            caps_ {};
     bool                                  have_caps_ = false;
+    // Frames the OSD was drawn on / not drawn on (no caps, or frame smaller
+    // than the caps' strides), and the size of the last frame.
+    uint64_t drawn_ = 0, skipped_ = 0;
+    size_t   last_frame_bytes_ = 0;
     bool                                  enabled_ = true;
     std::string                           text_ = "--- kbps, --- ms, --- fps";
     // Current window.
