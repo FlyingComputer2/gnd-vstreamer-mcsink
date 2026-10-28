@@ -89,8 +89,14 @@ screenshots. With `SDL_VIDEODRIVER=offscreen` and `--display sdl` it runs
 headless:
 
 ```text
-MCSINK kbps=5994 latency_ms=84.512 fps=29.90 received=… dropped=… rtp_lost=… capture_rejected=… corrupt_frames=… osd="drawn=… skipped=… …" display="…"
+MCSINK kbps=5994 latency_ms=84.512 screen_latency_ms=99.120 fps=29.90 received=… dropped=… rtp_lost=… capture_rejected=… corrupt_frames=… osd="drawn=… skipped=… …" display="…"
 ```
+
+The OSD reads `<kbps> kbps, <latency> ms, <fps> fps, screen <ms> ms`. `latency` is
+capture to decode. `screen` (`screen_latency_ms`) is capture to just after the
+display's present (vstreamer `sdl_sink` `present_latency_ms`, last 1 s). With
+vsync the page flip is queued then, so the frame is on screen up to one refresh
+later, plus the monitor's own lag.
 
 `dropped` counts datagrams this receiver's queue discarded. `rtp_lost` counts
 RTP sequence gaps on arrival: loss on the radio after FEC, at the ground P4's

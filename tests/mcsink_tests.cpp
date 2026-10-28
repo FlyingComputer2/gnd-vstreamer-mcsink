@@ -94,6 +94,29 @@ void test_text_and_latency()
     CHECK(y[size_t(500) * 1920 + 500] == 100);
 }
 
+// The app sets the display's capture -> on-screen latency; the next window
+// appends it after the fps.
+void test_screen_latency()
+{
+    auto counters = std::make_shared<mcsink::stats>();
+    int64_t now = 1'000'000'000;
+    mcsink::osd_overlay osd(counters, [&] { return now; });
+    osd.open();
+    const auto caps = caps_1080p();
+    osd.input(make_caps_pdu(sdu_type_e::CAPS_VIDEO_RAW, caps, 0, 0));
+    CHECK(osd.configure("screen_latency_ms", "x") == -EINVAL);
+    CHECK(osd.configure("screen_latency_ms", "97.30") == 0);
+    for (int i = 0; i < 40; ++i)
+    {
+        now += 33'000'000;
+        osd.input(frame(caps, uint64_t(now / 1000 - 80'000), 100));
+    }
+    std::string text;
+    osd.query("text", &text);
+    std::printf("osd text: %s\n", text.c_str());
+    CHECK(text.size() > 16 && text.compare(text.size() - 16, 16, ", screen 97.3 ms") == 0);
+}
+
 void test_no_capture_time()
 {
     auto counters = std::make_shared<mcsink::stats>();
@@ -156,6 +179,7 @@ void test_draw_rejects_small_buffer()
 int main()
 {
     test_text_and_latency();
+    test_screen_latency();
     test_no_capture_time();
     test_packed_frame();
     test_draw_rejects_small_buffer();
