@@ -131,18 +131,15 @@ void osd_overlay::refresh_locked(int64_t now)
     kbps_ = secs > 0 ? uint64_t(double(bytes - window_bytes_) * 8 / 1000 / secs + 0.5) : 0;
     fps_ = secs > 0 ? double(window_frames_) / secs : 0;
     latency_ms_ = window_latency_n_ ? window_latency_sum_ms_ / double(window_latency_n_) : -1;
-    char latency[32] = "---";
-    if (latency_ms_ >= 0)
+    char glass[32] = "---";
+    if (screen_latency_ms_ >= 0)
     {
-        std::snprintf(latency, sizeof(latency), "%.3f", latency_ms_);
+        std::snprintf(glass, sizeof(glass), "%.1f", screen_latency_ms_);
     }
-    char line[128];
-    const int n = std::snprintf(line, sizeof(line), "%llu kbps, %s ms, %.1f fps",
-                                static_cast<unsigned long long>(kbps_), latency, fps_);
-    if (screen_latency_ms_ >= 0 && n > 0 && size_t(n) < sizeof(line))
-    {
-        std::snprintf(line + n, sizeof(line) - size_t(n), ", screen %.1f ms", screen_latency_ms_);
-    }
+    // Camera-to-decode latency (latency_ms_) stays in the MCSINK line.
+    char line[96];
+    std::snprintf(line, sizeof(line), "%llu kbps, %.1f fps, %s ms",
+                  static_cast<unsigned long long>(kbps_), fps_, glass);
     text_ = line;
     window_start_ns_ = now;
     window_bytes_ = bytes;
