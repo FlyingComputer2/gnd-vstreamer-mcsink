@@ -70,6 +70,15 @@ build/gnd-vstreamer-mcsink --interface end1 --display sdl   # window under X/Way
 | `--osd` | `1` | `0` turns off the burn-in (the stats lines stay) |
 | `--stats` | `5` | seconds between stderr `MCSINK` lines, `0` = off |
 
+As a service on the GS host (`deploy/gnd-vstreamer-mcsink.service`: runs as `ubuntu` on tty1, conflicts
+with getty@tty1, restarts on exit; logs in `journalctl -u gnd-vstreamer-mcsink`):
+
+```sh
+sudo install -m 755 build-rel/gnd-vstreamer-mcsink /usr/local/bin/
+sudo install -m 644 deploy/gnd-vstreamer-mcsink.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now gnd-vstreamer-mcsink
+```
+
 KMSDRM needs the console: stop getty on tty1, or any other KMS client, first.
 With `SDL_VIDEODRIVER=offscreen` and `--display sdl` it runs headless and only
 prints the `MCSINK` lines:

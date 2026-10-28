@@ -1,0 +1,30 @@
+# GS host: gnd-vstreamer-mcsink on the HDMI console (KMS/DRM), with OSD.
+# Install: sudo install -m 755 build-rel/gnd-vstreamer-mcsink /usr/local/bin/
+#          sudo install -m 644 deploy/gnd-vstreamer-mcsink.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now gnd-vstreamer-mcsink
+[Unit]
+Description=gnd-vstreamer-mcsink (ground P4 multicast -> MPP -> OSD -> KMS/DRM)
+StartLimitIntervalSec=0
+After=network-online.target systemd-user-sessions.service getty@tty1.service
+Wants=network-online.target
+# The receiver takes tty1 for KD_GRAPHICS; the login prompt would draw over the video.
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=ubuntu
+SupplementaryGroups=video render
+ExecStart=/usr/local/bin/gnd-vstreamer-mcsink --interface end1 --display kmsdrm --stats 10
+# systemd hands tty1 to the service as its controlling terminal, so the receiver can
+# switch it to KD_GRAPHICS without root.
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+TTYReset=yes
+TTYVHangup=yes
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
