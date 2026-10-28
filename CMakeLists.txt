@@ -28,7 +28,7 @@ endforeach()
 include(FetchContent)
 FetchContent_Declare(vstreamer
     GIT_REPOSITORY https://github.com/FlyingComputer2/vstreamer.git
-    GIT_TAG 718562677e795b44c3ff5c96633af80f35529b9d
+    GIT_TAG 347070cfac53fcc1e070bd64923d44520037ebc9
 )
 FetchContent_MakeAvailable(vstreamer)
 

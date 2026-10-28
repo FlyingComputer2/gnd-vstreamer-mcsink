@@ -2,6 +2,8 @@
 
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
+#include <string>
 #include <vector>
 
 #include "core/port_caps.hpp"
@@ -50,6 +52,19 @@ int osd_overlay::configure(std::string_view key, std::string_view value)
         }
         std::lock_guard<std::mutex> lock(mu_);
         enabled_ = value == "1";
+        return 0;
+    }
+    if (key == "screen_latency_ms")
+    {
+        char *end = nullptr;
+        const std::string v(value);
+        const double ms = std::strtod(v.c_str(), &end);
+        if (v.empty() || *end)
+        {
+            return -EINVAL;
+        }
+        std::lock_guard<std::mutex> lock(mu_);
+        screen_latency_ms_ = ms;
         return 0;
     }
     return -ENOTSUP;
@@ -121,9 +136,13 @@ void osd_overlay::refresh_locked(int64_t now)
     {
         std::snprintf(latency, sizeof(latency), "%.3f", latency_ms_);
     }
-    char line[96];
-    std::snprintf(line, sizeof(line), "%llu kbps, %s ms, %.1f fps",
-                  static_cast<unsigned long long>(kbps_), latency, fps_);
+    char line[128];
+    const int n = std::snprintf(line, sizeof(line), "%llu kbps, %s ms, %.1f fps",
+                                static_cast<unsigned long long>(kbps_), latency, fps_);
+    if (screen_latency_ms_ >= 0 && n > 0 && size_t(n) < sizeof(line))
+    {
+        std::snprintf(line + n, sizeof(line) - size_t(n), ", screen %.1f ms", screen_latency_ms_);
+    }
     text_ = line;
     window_start_ns_ = now;
     window_bytes_ = bytes;

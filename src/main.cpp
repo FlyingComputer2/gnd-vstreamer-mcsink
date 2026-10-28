@@ -145,17 +145,27 @@ int main(int argc, char **argv)
                  group.c_str(), port.c_str(), iface.empty() ? "default" : iface.c_str(),
                  display_mode.c_str());
     auto next = std::chrono::steady_clock::now() + std::chrono::seconds(stats_s);
+    auto next_screen = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    std::string screen_ms = "?";
     while (g_running && rx.state() != pipeline_state_e::ERROR &&
            display.state() != pipeline_state_e::ERROR)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        if (stats_s <= 0 || std::chrono::steady_clock::now() < next) continue;
+        // The display's capture -> on-screen latency (last 1 s window) goes into the OSD.
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= next_screen)
+        {
+            next_screen = now + std::chrono::seconds(1);
+            screen_ms = q(display, "screen", "present_latency_ms");
+            if (screen_ms != "?") rx.configure("osd", "screen_latency_ms", screen_ms);
+        }
+        if (stats_s <= 0 || now < next) continue;
         next += std::chrono::seconds(stats_s);
         // key=value, one line per interval: the OSD numbers (last 1 s window) plus counters.
         std::fprintf(stderr,
-                     "MCSINK kbps=%s latency_ms=%s fps=%s received=%s dropped=%s rtp_lost=%s "
+                     "MCSINK kbps=%s latency_ms=%s screen_latency_ms=%s fps=%s received=%s dropped=%s rtp_lost=%s "
                      "capture_rejected=%s corrupt_frames=%s osd=\"%s\" display=\"%s\"\n",
-                     q(rx, "osd", "kbps").c_str(), q(rx, "osd", "latency_ms").c_str(),
+                     q(rx, "osd", "kbps").c_str(), q(rx, "osd", "latency_ms").c_str(), screen_ms.c_str(),
                      q(rx, "osd", "fps").c_str(), q(rx, "src", "received").c_str(),
                      q(rx, "src", "dropped").c_str(), q(rx, "depay", "rtp_lost").c_str(),
                      q(rx, "depay", "capture_ts_rejected").c_str(),

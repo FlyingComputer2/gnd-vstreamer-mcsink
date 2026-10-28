@@ -72,6 +72,9 @@ private:
     uint64_t kbps_ = 0;
     double   fps_ = 0;
     double   latency_ms_ = -1;
+    // Capture -> on screen (the display's last 1 s window), set by the app;
+    // < 0 = unknown and not shown.
+    double   screen_latency_ms_ = -1;
 };
 
 }  // namespace mcsink
