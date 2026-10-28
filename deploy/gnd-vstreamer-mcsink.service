@@ -14,7 +14,7 @@ Conflicts=getty@tty1.service
 Type=simple
 User=ubuntu
 SupplementaryGroups=video render
-ExecStart=/usr/local/bin/gnd-vstreamer-mcsink --interface end1 --display kmsdrm --stats 10
+ExecStart=/usr/local/bin/gnd-vstreamer-mcsink --interface end1 --display kmsdrm --stats 1
 # systemd hands tty1 to the service as its controlling terminal, so the receiver can
 # switch it to KD_GRAPHICS without root.
 TTYPath=/dev/tty1

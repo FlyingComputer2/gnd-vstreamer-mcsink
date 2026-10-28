@@ -28,8 +28,8 @@ namespace mcsink
  * The latency is only as good as the agreement between the sender's CLOCK_REALTIME and
  * this host's.
  *
- * Configure: enabled (1|0, default 1). Query: text (the current line), kbps, latency_ms,
- * fps.
+ * Configure: enabled (1|0, default 1). Query: text (the current line), kbps, latency_ms
+ * (-1 when the window had no capture time), fps.
  */
 class osd_overlay : public vstreamer::component_coder
 {

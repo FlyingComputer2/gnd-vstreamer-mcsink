@@ -68,7 +68,7 @@ build/gnd-vstreamer-mcsink --interface end1 --display sdl   # window under X/Way
 | `--display` | `kmsdrm` | `kmsdrm` or `sdl` |
 | `--fps` | `30` | nominal frame rate |
 | `--osd` | `1` | `0` turns off the burn-in (the stats lines stay) |
-| `--stats` | `5` | seconds between stderr `MCSINK` lines, `0` = off |
+| `--stats` | `1` | seconds between stderr `MCSINK` lines, `0` = off |
 
 As a service on the GS host (`deploy/gnd-vstreamer-mcsink.service`: runs as `ubuntu` on tty1, conflicts
 with getty@tty1, restarts on exit; logs in `journalctl -u gnd-vstreamer-mcsink`):
@@ -80,11 +80,15 @@ sudo systemctl daemon-reload && sudo systemctl enable --now gnd-vstreamer-mcsink
 ```
 
 KMSDRM needs the console: stop getty on tty1, or any other KMS client, first.
-With `SDL_VIDEODRIVER=offscreen` and `--display sdl` it runs headless and only
-prints the `MCSINK` lines:
+Every `--stats` seconds it prints one key=value `MCSINK` line to stderr: the
+OSD numbers (`latency_ms=-1.000` = no capture time in the window) and
+counters. As a service, read it with
+`journalctl -u gnd-vstreamer-mcsink -o cat | grep MCSINK`. Use this instead of
+screenshots. With `SDL_VIDEODRIVER=offscreen` and `--display sdl` it runs
+headless:
 
 ```text
-MCSINK osd="5994 kbps, 84.512 ms, 29.9 fps" received=… dropped=… rtp_lost=… capture_rejected=… display=…
+MCSINK kbps=5994 latency_ms=84.512 fps=29.90 received=… dropped=… rtp_lost=… capture_rejected=… display="…"
 ```
 
 `dropped` counts datagrams this receiver's queue discarded. `rtp_lost` counts

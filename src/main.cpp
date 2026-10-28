@@ -44,7 +44,7 @@ void usage(const char *prog)
                  "  --display kmsdrm|sdl  default kmsdrm\n"
                  "  --fps N               nominal frame rate (default 30)\n"
                  "  --osd 1|0             burn the OSD into the video (default 1)\n"
-                 "  --stats S             seconds between stderr status lines, 0 = off (default 5)\n",
+                 "  --stats S             seconds between stderr MCSINK lines, 0 = off (default 1)\n",
                  prog);
 }
 
@@ -60,7 +60,7 @@ int main(int argc, char **argv)
 {
     std::string group = "239.255.42.1", port = "5600", iface, display_mode = "kmsdrm", fps = "30",
                 osd = "1";
-    int stats_s = 5;
+    int stats_s = 1;
     for (int i = 1; i < argc; ++i)
     {
         const std::string_view arg(argv[i]);
@@ -147,10 +147,12 @@ int main(int argc, char **argv)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         if (stats_s <= 0 || std::chrono::steady_clock::now() < next) continue;
         next += std::chrono::seconds(stats_s);
+        // key=value, one line per interval: the OSD numbers (last 1 s window) plus counters.
         std::fprintf(stderr,
-                     "MCSINK osd=\"%s\" received=%s dropped=%s rtp_lost=%s capture_rejected=%s "
-                     "display=%s\n",
-                     q(rx, "osd", "text").c_str(), q(rx, "src", "received").c_str(),
+                     "MCSINK kbps=%s latency_ms=%s fps=%s received=%s dropped=%s rtp_lost=%s "
+                     "capture_rejected=%s display=\"%s\"\n",
+                     q(rx, "osd", "kbps").c_str(), q(rx, "osd", "latency_ms").c_str(),
+                     q(rx, "osd", "fps").c_str(), q(rx, "src", "received").c_str(),
                      q(rx, "src", "dropped").c_str(), q(rx, "depay", "rtp_lost").c_str(),
                      q(rx, "depay", "capture_ts_rejected").c_str(),
                      q(display, "screen", "stats").c_str());
