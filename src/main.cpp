@@ -44,6 +44,8 @@ void usage(const char *prog)
                  "  --display kmsdrm|sdl  default kmsdrm\n"
                  "  --fps N               nominal frame rate (default 30)\n"
                  "  --osd 1|0             burn the OSD into the video (default 1)\n"
+                 "  --show-corrupt 1|0    show frames decoded after a loss, with artifacts, instead\n"
+                 "                        of freezing until the next IDR (default 1)\n"
                  "  --stats S             seconds between stderr MCSINK lines, 0 = off (default 1)\n",
                  prog);
 }
@@ -59,7 +61,7 @@ std::string q(const pipeline &p, std::string_view node, std::string_view key)
 int main(int argc, char **argv)
 {
     std::string group = "239.255.42.1", port = "5600", iface, display_mode = "kmsdrm", fps = "30",
-                osd = "1";
+                osd = "1", show_corrupt = "1";
     int stats_s = 1;
     for (int i = 1; i < argc; ++i)
     {
@@ -81,6 +83,7 @@ int main(int argc, char **argv)
         else if (arg == "--display") display_mode = v;
         else if (arg == "--fps") fps = v;
         else if (arg == "--osd") osd = v;
+        else if (arg == "--show-corrupt") show_corrupt = v;
         else if (arg == "--stats") stats_s = std::atoi(v);
         else
         {
@@ -116,6 +119,7 @@ int main(int argc, char **argv)
         !check("depay fps", rx.configure("depay", "fps", fps)) ||
         !check("decode fps", rx.configure("decode", "fps", fps)) ||
         !check("decode size", rx.configure("decode", "output_size_mode", "stream")) ||
+        !check("show corrupt", rx.configure("decode", "show_corrupt", show_corrupt)) ||
         !check("osd", rx.configure("osd", "enabled", osd)) ||
         !check("title", display.configure("screen", "title", "gnd-vstreamer-mcsink")) ||
         !check("driver", display.configure("screen", "video_driver",
@@ -150,11 +154,13 @@ int main(int argc, char **argv)
         // key=value, one line per interval: the OSD numbers (last 1 s window) plus counters.
         std::fprintf(stderr,
                      "MCSINK kbps=%s latency_ms=%s fps=%s received=%s dropped=%s rtp_lost=%s "
-                     "capture_rejected=%s display=\"%s\"\n",
+                     "capture_rejected=%s corrupt_frames=%s osd=\"%s\" display=\"%s\"\n",
                      q(rx, "osd", "kbps").c_str(), q(rx, "osd", "latency_ms").c_str(),
                      q(rx, "osd", "fps").c_str(), q(rx, "src", "received").c_str(),
                      q(rx, "src", "dropped").c_str(), q(rx, "depay", "rtp_lost").c_str(),
                      q(rx, "depay", "capture_ts_rejected").c_str(),
+                     q(rx, "decode", "corrupt_frames").c_str(),
+                     q(rx, "osd", "draw").c_str(),
                      q(display, "screen", "stats").c_str());
     }
     const bool failed =

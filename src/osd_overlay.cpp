@@ -78,6 +78,14 @@ int osd_overlay::query(std::string_view key, std::string *value) const
     else if (key == "fps") { std::snprintf(buf, sizeof(buf), "%.2f", fps_); *value = buf; }
     else if (key == "latency_ms") { std::snprintf(buf, sizeof(buf), "%.3f", latency_ms_); *value = buf; }
     else if (key == "enabled") *value = enabled_ ? "1" : "0";
+    else if (key == "draw")
+    {
+        char d[160];
+        std::snprintf(d, sizeof(d), "drawn=%llu skipped=%llu caps=%s%dx%d stride=%dx%d frame_bytes=%zu",
+                      (unsigned long long)drawn_, (unsigned long long)skipped_, have_caps_ ? "" : "none:",
+                      caps_.width, caps_.height, caps_.hor_stride, caps_.ver_stride, last_frame_bytes_);
+        *value = d;
+    }
     else return -ENOTSUP;
     return 0;
 }
@@ -160,11 +168,25 @@ int osd_overlay::input(component_pdu &&in)
             ++window_latency_n_;
         }
     }
-    if (enabled_ && have_caps_)
+    last_frame_bytes_ = in.sdu.size();
+    if (enabled_)
     {
         const int scale = std::max(2, caps_.height / 270);
-        draw_text_nv12(in.sdu.u8(), in.sdu.size(), caps_, 8 * scale, 8 * scale, scale, 3 * scale,
-                       text_);
+        // The MPP decoder delivers frames packed to the visible height while
+        // its caps keep the coded vertical stride (1080 vs 1088 rows), so take
+        // the plane height from the frame size when it is the smaller one.
+        video_raw_caps layout = caps_;
+        if (layout.hor_stride > 0)
+        {
+            const size_t rows = in.sdu.size() * 2 / 3 / size_t(layout.hor_stride);
+            if (rows < size_t(layout.ver_stride) && rows >= size_t(layout.height))
+                layout.ver_stride = int(rows);
+        }
+        if (have_caps_ && draw_text_nv12(in.sdu.u8(), in.sdu.size(), layout, 8 * scale, 8 * scale,
+                                         scale, 3 * scale, text_))
+            ++drawn_;
+        else
+            ++skipped_;
     }
     out_.push_back(std::move(in));
     notify_wakeup();

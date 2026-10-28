@@ -38,11 +38,12 @@ video_raw_caps caps_1080p()
     return c;
 }
 
-component_pdu frame(const video_raw_caps &c, uint64_t ts_us, uint8_t luma)
+// rows: plane height in the buffer; 0 = the caps' ver_stride.
+component_pdu frame(const video_raw_caps &c, uint64_t ts_us, uint8_t luma, int rows = 0)
 {
-    const size_t size = size_t(c.hor_stride) * size_t(c.ver_stride) * 3 / 2;
-    std::vector<uint8_t> bytes(size, 128);
-    std::memset(bytes.data(), luma, size_t(c.hor_stride) * size_t(c.ver_stride));
+    const size_t plane = size_t(c.hor_stride) * size_t(rows ? rows : c.ver_stride);
+    std::vector<uint8_t> bytes(plane * 3 / 2, 128);
+    std::memset(bytes.data(), luma, plane);
     component_pdu pdu;
     pdu.sdu_type = sdu_type_e::NV12;
     pdu.sdu = bfc::shared_sized_buffer::copy_from(bytes.data(), bytes.size());
@@ -111,6 +112,38 @@ void test_no_capture_time()
     CHECK(text.find(", --- ms,") != std::string::npos);
 }
 
+// The MPP decoder packs frames to the visible height (1080 rows) while its
+// caps keep ver_stride 1088; the OSD must still draw, with chroma at row 1080.
+void test_packed_frame()
+{
+    auto counters = std::make_shared<mcsink::stats>();
+    int64_t now = 1'000'000'000;
+    mcsink::osd_overlay osd(counters, [&] { return now; });
+    osd.open();
+    const auto caps = caps_1080p();
+    osd.input(make_caps_pdu(sdu_type_e::CAPS_VIDEO_RAW, caps, 0, 0));
+    component_pdu out;
+    osd.output(out);
+    for (int i = 0; i < 40; ++i)
+    {
+        now += 33'000'000;
+        CHECK(osd.input(frame(caps, 0, 100, 1080)) == 0);
+        CHECK(osd.output(out) == 0);
+    }
+    std::string draw;
+    CHECK(osd.query("draw", &draw) == 0);
+    std::printf("osd draw: %s\n", draw.c_str());
+    CHECK(draw.rfind("drawn=40 skipped=0 ", 0) == 0);
+    const uint8_t *y = out.sdu.u8();
+    size_t white = 0;
+    for (int r = 0; r < 120; ++r)
+        for (int c = 0; c < 1200; ++c)
+            white += y[size_t(r) * 1920 + size_t(c)] == 235;
+    CHECK(white > 1000);
+    // Below the box the last luma row is untouched.
+    CHECK(y[size_t(1079) * 1920 + 10] == 100);
+}
+
 void test_draw_rejects_small_buffer()
 {
     const auto caps = caps_1080p();
@@ -124,6 +157,7 @@ int main()
 {
     test_text_and_latency();
     test_no_capture_time();
+    test_packed_frame();
     test_draw_rejects_small_buffer();
     if (failures)
     {
