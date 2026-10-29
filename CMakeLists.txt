@@ -1,6 +1,6 @@
 # gnd-vstreamer-mcsink: ground-station receiver for the ground P4's RTP H.264
 # multicast. multicast_source -> rtp_h264_depay -> h264_decoder_mpp -> OSD
-# (bitrate, camera-to-decode latency, decode fps) -> sdl_sink (KMSDRM or a
+# (decode fps, rate shortfall, pacing jitter, screen latency) -> sdl_sink (KMSDRM or a
 # window). The vstreamer components come from a pinned vstreamer.
 # Local checkout: -DFETCHCONTENT_SOURCE_DIR_VSTREAMER=<dir>.
 cmake_minimum_required(VERSION 3.16)

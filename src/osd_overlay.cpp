@@ -1,6 +1,8 @@
 #include "osd_overlay.hpp"
 
+#include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -44,6 +46,13 @@ osd_overlay::osd_overlay(std::shared_ptr<stats> counters, clock_ns now_ns)
 
 int osd_overlay::configure(std::string_view key, std::string_view value)
 {
+    if (key == "refresh")
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        const int64_t now = now_ns_();
+        if (now - window_start_ns_ >= k_refresh_ns) refresh_locked(now);
+        return 0;
+    }
     if (key == "enabled")
     {
         if (value != "0" && value != "1")
@@ -52,6 +61,16 @@ int osd_overlay::configure(std::string_view key, std::string_view value)
         }
         std::lock_guard<std::mutex> lock(mu_);
         enabled_ = value == "1";
+        return 0;
+    }
+    if (key == "fps")
+    {
+        char *end = nullptr;
+        const std::string v(value);
+        const double fps = std::strtod(v.c_str(), &end);
+        if (v.empty() || *end || !std::isfinite(fps) || fps <= 0) return -EINVAL;
+        std::lock_guard<std::mutex> lock(mu_);
+        nominal_fps_ = fps;
         return 0;
     }
     if (key == "screen_latency_ms")
@@ -91,6 +110,8 @@ int osd_overlay::query(std::string_view key, std::string *value) const
     if (key == "text") *value = text_;
     else if (key == "kbps") *value = std::to_string(kbps_);
     else if (key == "fps") { std::snprintf(buf, sizeof(buf), "%.2f", fps_); *value = buf; }
+    else if (key == "decode_error_fps") { std::snprintf(buf, sizeof(buf), "%.3f", decode_error_fps_); *value = buf; }
+    else if (key == "frame_pacing_error_ms") { std::snprintf(buf, sizeof(buf), "%.3f", pacing_error_ms_); *value = buf; }
     else if (key == "latency_ms") { std::snprintf(buf, sizeof(buf), "%.3f", latency_ms_); *value = buf; }
     else if (key == "enabled") *value = enabled_ ? "1" : "0";
     else if (key == "draw")
@@ -110,7 +131,15 @@ int osd_overlay::open()
     std::lock_guard<std::mutex> lock(mu_);
     out_.clear();
     have_caps_ = false;
+    intervals_.clear();
+    frame_times_.clear();
+    last_frame_ns_ = -1;
+    pacing_error_ms_ = -1;
     window_start_ns_ = now_ns_();
+    metrics_start_ns_ = window_start_ns_;
+    fps_ = 0; kbps_ = 0; latency_ms_ = -1; screen_latency_ms_ = -1;
+    decode_error_fps_ = 0;
+    text_ = "frame --- fps\nerror --- fps\njitter --- ms\nlatency --- ms";
     window_bytes_ = stats_ ? stats_->bytes.load() : 0;
     window_frames_ = 0;
     window_latency_n_ = 0;
@@ -131,15 +160,31 @@ void osd_overlay::refresh_locked(int64_t now)
     kbps_ = secs > 0 ? uint64_t(double(bytes - window_bytes_) * 8 / 1000 / secs + 0.5) : 0;
     fps_ = secs > 0 ? double(window_frames_) / secs : 0;
     latency_ms_ = window_latency_n_ ? window_latency_sum_ms_ / double(window_latency_n_) : -1;
+    while (!intervals_.empty() && intervals_.front().end_ns <= now - 5'000'000'000)
+        intervals_.pop_front();
+    while (!frame_times_.empty() && frame_times_.front() <= now - 5'000'000'000)
+        frame_times_.pop_front();
+    const double metric_secs = std::min(5.0, double(now - metrics_start_ns_) / 1e9);
+    decode_error_fps_ = metric_secs > 0 ? std::max(0.0, nominal_fps_ - frame_times_.size() / metric_secs) : 0;
+    pacing_error_ms_ = -1;
+    if (!intervals_.empty()) {
+        double mean = 0, error = 0;
+        for (const auto &i : intervals_) mean += i.ms;
+        mean /= intervals_.size();
+        for (const auto &i : intervals_) error += std::abs(i.ms - mean);
+        pacing_error_ms_ = error / intervals_.size();
+    }
+    char jitter[32] = "---";
+    if (pacing_error_ms_ >= 0) std::snprintf(jitter, sizeof(jitter), "%.1f", pacing_error_ms_);
     char glass[32] = "---";
     if (screen_latency_ms_ >= 0)
     {
         std::snprintf(glass, sizeof(glass), "%.1f", screen_latency_ms_);
     }
     // Camera-to-decode latency (latency_ms_) stays in the MCSINK line.
-    char line[96];
-    std::snprintf(line, sizeof(line), "%llu kbps, %.1f fps, %s ms",
-                  static_cast<unsigned long long>(kbps_), fps_, glass);
+    char line[160];
+    std::snprintf(line, sizeof(line), "frame %.1f fps\nerror %.1f fps\njitter %s ms\nlatency %s ms",
+                  fps_, decode_error_fps_, jitter, glass);
     text_ = line;
     window_start_ns_ = now;
     window_bytes_ = bytes;
@@ -169,11 +214,19 @@ int osd_overlay::input(component_pdu &&in)
         return -EINVAL;
     }
     const int64_t now = now_ns_();
+    frame_times_.push_back(now);
+    if (last_frame_ns_ >= 0)
+        intervals_.push_back({now, double(now - last_frame_ns_) / 1e6});
+    last_frame_ns_ = now;
+    while (!intervals_.empty() && intervals_.front().end_ns <= now - 5'000'000'000)
+        intervals_.pop_front();
     // Close the window before counting this frame, so it covers whole frame intervals.
     if (now - window_start_ns_ >= k_refresh_ns)
     {
         refresh_locked(now);
     }
+    while (!frame_times_.empty() && frame_times_.front() <= now - 5'000'000'000)
+        frame_times_.pop_front();
     ++window_frames_;
     if (in.ts_us > 0)
     {
