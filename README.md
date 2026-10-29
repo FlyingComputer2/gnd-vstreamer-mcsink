@@ -19,16 +19,26 @@ and `osd_overlay` are this repo's own components.
 Top left, refreshed once a second:
 
 ```text
-5994 kbps, 84.512 ms, 29.9 fps
+frame 29.9 fps
+error 0.1 fps
+jitter 1.2 ms
+latency 99.1 ms
 ```
 
-- **kbps:** RTP bytes received per second.
-- **ms:** mean camera-to-decode latency over the second. It is this host's
-  monotonic time when the decoder outputs a frame, minus the frame's capture
-  instant. The rover's packer writes that instant as `CLOCK_REALTIME` (RTP
-  header extension id 2), and `rtp_h264_depay` maps it to this host's clock.
-  `---` means no frame in the second had a plausible capture time.
-- **fps:** frames out of the decoder per second.
+- **frame:** decoder output frames per second over the last refresh interval.
+- **error:** `max(0, nominal fps - decoded frames / seconds)` over the last five
+  seconds (time since startup until five seconds have elapsed). Nominal fps is
+  `--fps`, default 30. This is a rate shortfall, including losses before decode;
+  it does not count decoder corruption reports.
+- **jitter:** mean absolute deviation of decoded-frame intervals from their mean
+  interval in a rolling five-second window. An interval belongs to the window
+  when its ending frame is in it. `---` means no intervals are available.
+- **latency:** camera-to-screen latency from the display's last one-second
+  window, `---` until known. See the display timing limits below.
+
+The metrics use monotonic time. Steady slow playback can have zero jitter and
+positive error; a burst followed by a gap raises jitter. Metrics reset on open
+and refresh during a stall. Bitrate and camera-to-decode latency remain in logs.
 
 The latency is only right if the clocks agree:
 
@@ -89,11 +99,10 @@ screenshots. With `SDL_VIDEODRIVER=offscreen` and `--display sdl` it runs
 headless:
 
 ```text
-MCSINK kbps=5994 latency_ms=84.512 screen_latency_ms=99.120 fps=29.90 received=… dropped=… rtp_lost=… capture_rejected=… corrupt_frames=… osd="drawn=… skipped=… …" display="…"
+MCSINK kbps=5994 latency_ms=84.512 screen_latency_ms=99.120 fps=29.90 decode_error_fps=0.100 frame_pacing_error_ms=1.200 received=… dropped=… rtp_lost=… capture_rejected=… corrupt_frames=… osd="drawn=… skipped=… …" display="…"
 ```
 
-The OSD reads `<kbps> kbps, <fps> fps, <ms> ms`, where the latency is capture
-to screen (`screen_latency_ms`): capture to just after the display's present
+The OSD latency is capture to screen (`screen_latency_ms`): capture to just after the display's present
 (vstreamer `sdl_sink` `present_latency_ms`, last 1 s), `---` until known. With
 vsync the page flip is queued then, so the frame is on screen up to one refresh
 later, plus the monitor's own lag. Capture-to-decode latency is `latency_ms`

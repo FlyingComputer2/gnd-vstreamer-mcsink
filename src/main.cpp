@@ -4,7 +4,7 @@
  *   rx:      multicast_source -> rtp_h264_depay -> h264_decoder_mpp -> osd_overlay -> queue
  *   display: queue -> sdl_sink (KMSDRM on the console, or a window under X/Wayland)
  *
- * The OSD shows bitrate, decode fps and camera-to-screen latency (the MCSINK line also has
+ * The OSD shows decode fps, rate shortfall, pacing jitter and camera-to-screen latency (the MCSINK line also has
  * camera-to-decode). Latency compares the
  * rover's capture CLOCK_REALTIME (RTP header extension id 2) with this host's, so this
  * host's clock must be the one the ground P4 follows (its SNTP server) or agree with it.
@@ -121,6 +121,7 @@ int main(int argc, char **argv)
         !check("decode fps", rx.configure("decode", "fps", fps)) ||
         !check("decode size", rx.configure("decode", "output_size_mode", "stream")) ||
         !check("show corrupt", rx.configure("decode", "show_corrupt", show_corrupt)) ||
+        !check("osd fps", rx.configure("osd", "fps", fps)) ||
         !check("osd", rx.configure("osd", "enabled", osd)) ||
         !check("title", display.configure("screen", "title", "gnd-vstreamer-mcsink")) ||
         !check("driver", display.configure("screen", "video_driver",
@@ -157,6 +158,7 @@ int main(int argc, char **argv)
         if (now >= next_screen)
         {
             next_screen = now + std::chrono::seconds(1);
+            rx.configure("osd", "refresh", "1");
             screen_ms = q(display, "screen", "present_latency_ms");
             if (screen_ms != "?") rx.configure("osd", "screen_latency_ms", screen_ms);
         }
@@ -164,10 +166,11 @@ int main(int argc, char **argv)
         next += std::chrono::seconds(stats_s);
         // key=value, one line per interval: the OSD numbers (last 1 s window) plus counters.
         std::fprintf(stderr,
-                     "MCSINK kbps=%s latency_ms=%s screen_latency_ms=%s fps=%s received=%s dropped=%s rtp_lost=%s "
+                     "MCSINK kbps=%s latency_ms=%s screen_latency_ms=%s fps=%s decode_error_fps=%s frame_pacing_error_ms=%s received=%s dropped=%s rtp_lost=%s "
                      "capture_rejected=%s corrupt_frames=%s osd=\"%s\" display=\"%s\"\n",
                      q(rx, "osd", "kbps").c_str(), q(rx, "osd", "latency_ms").c_str(), screen_ms.c_str(),
-                     q(rx, "osd", "fps").c_str(), q(rx, "src", "received").c_str(),
+                     q(rx, "osd", "fps").c_str(), q(rx, "osd", "decode_error_fps").c_str(),
+                     q(rx, "osd", "frame_pacing_error_ms").c_str(), q(rx, "src", "received").c_str(),
                      q(rx, "src", "dropped").c_str(), q(rx, "depay", "rtp_lost").c_str(),
                      q(rx, "depay", "capture_ts_rejected").c_str(),
                      q(rx, "decode", "corrupt_frames").c_str(),
