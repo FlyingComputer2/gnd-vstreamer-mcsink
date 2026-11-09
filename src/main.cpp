@@ -165,12 +165,12 @@ int main(int argc, char **argv)
         // key=value, one line per interval: the OSD numbers (last 1 s window) plus counters.
         std::fprintf(stderr,
                      "MCSINK kbps=%s latency_ms=%s screen_latency_ms=%s fps=%s received=%s dropped=%s rtp_lost=%s "
-                     "capture_rejected=%s corrupt_frames=%s osd=\"%s\" display=\"%s\"\n",
+                     "capture_rejected=%s corrupt_frames=%s stale_frames=%s osd=\"%s\" display=\"%s\"\n",
                      q(rx, "osd", "kbps").c_str(), q(rx, "osd", "latency_ms").c_str(), screen_ms.c_str(),
                      q(rx, "osd", "fps").c_str(), q(rx, "src", "received").c_str(),
                      q(rx, "src", "dropped").c_str(), q(rx, "depay", "rtp_lost").c_str(),
                      q(rx, "depay", "capture_ts_rejected").c_str(),
-                     q(rx, "decode", "corrupt_frames").c_str(),
+                     q(rx, "decode", "corrupt_frames").c_str(), q(rx, "decode", "stale_frames").c_str(),
                      q(rx, "osd", "draw").c_str(),
                      q(display, "screen", "stats").c_str());
     }
