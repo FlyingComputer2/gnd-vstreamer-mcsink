@@ -25,10 +25,13 @@ foreach(opt ENABLE_H264_DECODER_MPP ENABLE_SDL_SINK ENABLE_RTP_H264_DEPAY)
     set(${opt} ON CACHE BOOL "" FORCE)
 endforeach()
 
+# vstreamer takes bfc config from the top-level project.
+set(BFC_CONFIG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bfc_config)
+
 include(FetchContent)
 FetchContent_Declare(vstreamer
     GIT_REPOSITORY https://github.com/FlyingComputer2/vstreamer.git
-    GIT_TAG b79d82da6b72359f104b8bff8d5188f2ecd6e42b
+    GIT_TAG 0b8f9df47cf35bb3b0fe78ac863d81b3f845ef4b
 )
 FetchContent_MakeAvailable(vstreamer)
 

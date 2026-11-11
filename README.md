@@ -89,7 +89,7 @@ screenshots. With `SDL_VIDEODRIVER=offscreen` and `--display sdl` it runs
 headless:
 
 ```text
-MCSINK kbps=5994 latency_ms=84.512 screen_latency_ms=99.120 fps=29.90 received=… dropped=… rtp_lost=… capture_rejected=… corrupt_frames=… stale_frames=… osd="drawn=… skipped=… …" display="…"
+MCSINK kbps=5994 latency_ms=84.512 screen_latency_ms=99.120 fps=29.90 received=… dropped=… rtp_lost=… rtp_reordered=… rtp_resyncs=… capture_rejected=… corrupt_frames=… stale_frames=… osd="drawn=… skipped=… …" display="…"
 ```
 
 The OSD reads `<kbps> kbps, <fps> fps, <ms> ms`, where the latency is capture
@@ -101,7 +101,9 @@ in the MCSINK line.
 
 `dropped` counts datagrams this receiver's queue discarded. `rtp_lost` counts
 RTP sequence gaps on arrival: loss on the radio after FEC, at the ground P4's
-multicast fanout, or on the LAN. `corrupt_frames` counts frames the decoder
+multicast fanout, or on the LAN. `rtp_reordered` counts late or duplicate
+packets the depay dropped, and `rtp_resyncs` counts times it followed a
+restarted sender whose sequence started behind the old one. `corrupt_frames` counts frames the decoder
 flagged as decoded against a lost reference (shown with `--show-corrupt 1`).
 `stale_frames` counts flagged frames the decoder could not decode at all: MPP
 returns them in a recycled buffer that still holds an older picture, so they
