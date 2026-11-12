@@ -16,20 +16,9 @@
 namespace mcsink
 {
 
-/*
- * NV12 pass-through that burns an OSD line into each decoded frame, top left:
- *   "<kbps> kbps, <latency.xxx> ms, <fps> fps"
- * refreshed once a second from the window since the last refresh:
- *   kbps     source datagram bytes (RTP as received) per second
- *   latency  mean camera-to-decode: local monotonic now minus the frame's ts_us, which
- *            rtp_h264_depay set from the sender's CLOCK_REALTIME capture stamp; "---"
- *            when no frame in the window had one (ts_us 0)
- *   fps      frames through this node per second (decoder output rate)
- * The latency is only as good as the agreement between the sender's CLOCK_REALTIME and
- * this host's.
- *
- * Configure: enabled (1|0, default 1). Query: text (the current line), kbps, latency_ms
- * (-1 when the window had no capture time), fps.
+/* Four-line decoder fps, decode error fps, 5 s pacing jitter and screen latency OSD.
+ * Pacing is mean absolute interval deviation from the rolling mean interval.
+ * Bitrate and camera-to-decode latency remain available through query().
  */
 class osd_overlay : public vstreamer::component_coder
 {
@@ -61,13 +50,21 @@ private:
     uint64_t drawn_ = 0, skipped_ = 0;
     size_t   last_frame_bytes_ = 0;
     bool                                  enabled_ = true;
-    std::string                           text_ = "--- kbps, --- ms, --- fps";
+    std::string                           text_ = "frame --- fps\nerror --- fps\njitter --- ms\nlatency --- ms";
     // Current window.
     int64_t  window_start_ns_ = 0;
     uint64_t window_bytes_ = 0;
     uint64_t window_frames_ = 0;
     uint64_t window_latency_n_ = 0;
     double   window_latency_sum_ms_ = 0;
+    struct interval { int64_t end_ns; double ms; };
+    std::deque<interval> intervals_;
+    std::deque<int64_t> frame_times_;
+    int64_t metrics_start_ns_ = 0;
+    double nominal_fps_ = 30;
+    double decode_error_fps_ = 0;
+    int64_t last_frame_ns_ = -1;
+    double pacing_error_ms_ = -1;
     // Last refresh.
     uint64_t kbps_ = 0;
     double   fps_ = 0;

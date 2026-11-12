@@ -1,5 +1,6 @@
 // Host tests: OSD text, latency window and NV12 burn-in. No network or display.
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -76,7 +77,7 @@ void test_text_and_latency()
     CHECK(osd.query("text", &text) == 0);
     std::printf("osd text: %s\n", text.c_str());
     // 6000 kbit over 1.001 s; 30 frames over the same window.
-    CHECK(text == "5994 kbps, 30.0 fps, --- ms");  // glass latency not set yet
+    CHECK(text == "frame 30.0 fps\nerror 0.0 fps\njitter 2.1 ms\nlatency --- ms");  // glass latency not set yet
     std::string decode;
     CHECK(osd.query("latency_ms", &decode) == 0 && decode == "80.000");
     // The frame now carries the burned-in text: white glyph pixels in the top-left box.
@@ -116,7 +117,7 @@ void test_screen_latency()
     std::string text;
     osd.query("text", &text);
     std::printf("osd text: %s\n", text.c_str());
-    CHECK(text.size() > 13 && text.compare(text.size() - 13, 13, " fps, 97.3 ms") == 0);
+    CHECK(text.find("\nlatency 97.3 ms") != std::string::npos);
 }
 
 void test_no_capture_time()
@@ -171,6 +172,81 @@ void test_packed_frame()
     CHECK(y[size_t(1079) * 1920 + 10] == 100);
 }
 
+// Synthetic clock only: verify 5 s rollover, rate shortfall and stream reset.
+void test_rolling_metrics()
+{
+    int64_t now = 0;
+    mcsink::osd_overlay osd({}, [&] { return now; });
+    CHECK(osd.configure("enabled", "0") == 0);
+    CHECK(osd.configure("fps", "nan") == -EINVAL);
+    CHECK(osd.configure("fps", "0") == -EINVAL);
+    CHECK(osd.configure("fps", "30") == 0);
+    CHECK(osd.open() == 0);
+    component_pdu out;
+    auto tick = [&] {
+        component_pdu f;
+        f.sdu_type = sdu_type_e::NV12;
+        CHECK(osd.input(std::move(f)) == 0);
+        CHECK(osd.output(out) == 0);
+    };
+    // 28 fps over 5 seconds. Force a refresh at the exact boundary.
+    for (int i = 1; i <= 139; ++i) { now = int64_t(i) * 5'000'000'000 / 140; tick(); }
+    now = 5'000'000'000;
+    // Existing refreshes are slightly offset; query at the next exact refresh below.
+    tick();
+    now = 6'100'000'000; tick();
+    std::string error, jitter;
+    CHECK(osd.query("decode_error_fps", &error) == 0);
+    CHECK(std::stod(error) > 7); // last five seconds include a 1.1 s gap
+    CHECK(osd.query("frame_pacing_error_ms", &jitter) == 0);
+    CHECK(std::stod(jitter) > 10);
+    // After the gap expires, perfectly even intervals recover to zero jitter.
+    for (int i = 1; i <= 180; ++i) { now = 6'100'000'000 + int64_t(i) * 40'000'000; tick(); }
+    CHECK(osd.query("frame_pacing_error_ms", &jitter) == 0 && jitter == "0.000");
+    CHECK(osd.query("decode_error_fps", &error) == 0 && error == "5.000");
+    now += 6'000'000'000;
+    CHECK(osd.configure("refresh", "1") == 0);
+    CHECK(osd.query("decode_error_fps", &error) == 0 && error == "30.000");
+    CHECK(osd.query("frame_pacing_error_ms", &jitter) == 0 && jitter == "-1.000");
+    CHECK(osd.open() == 0);
+    std::string text;
+    CHECK(osd.query("text", &text) == 0 && text == "frame --- fps\nerror --- fps\njitter --- ms\nlatency --- ms");
+}
+
+void test_known_pacing_deviation()
+{
+    int64_t now = 0;
+    mcsink::osd_overlay osd({}, [&] { return now; });
+    osd.configure("enabled", "0");
+    osd.open();
+    component_pdu out;
+    for (int i = 0; i <= 34; ++i) {
+        if (i) now += i % 2 ? 20'000'000 : 40'000'000;
+        component_pdu f;
+        f.sdu_type = sdu_type_e::NV12;
+        CHECK(osd.input(std::move(f)) == 0);
+        CHECK(osd.output(out) == 0);
+    }
+    std::string jitter;
+    CHECK(osd.query("frame_pacing_error_ms", &jitter) == 0 && jitter == "10.000");
+}
+
+void test_multiline_font()
+{
+    auto caps = caps_1080p();
+    std::vector<uint8_t> data(size_t(caps.hor_stride) * caps.ver_stride * 3 / 2, 100);
+    CHECK(mcsink::text_width("frame\nlatency", 2) == mcsink::text_width("latency", 2));
+    CHECK(mcsink::draw_text_nv12(data.data(), data.size(), caps, 20, 20, 2, 2,
+                                "frame\nerror\njitter\nlatency"));
+    for (int line = 0; line < 4; ++line) {
+        int white = 0;
+        for (int y = 20 + line * 16; y < 34 + line * 16; ++y)
+            for (int x = 20; x < 110; ++x) white += data[size_t(y) * caps.hor_stride + x] == 235;
+        CHECK(white > 0);
+    }
+    CHECK(data[size_t(100) * caps.hor_stride + 20] == 100);
+}
+
 void test_draw_rejects_small_buffer()
 {
     const auto caps = caps_1080p();
@@ -182,6 +258,9 @@ void test_draw_rejects_small_buffer()
 
 int main()
 {
+    test_known_pacing_deviation();
+    test_rolling_metrics();
+    test_multiline_font();
     test_text_and_latency();
     test_screen_latency();
     test_no_capture_time();
